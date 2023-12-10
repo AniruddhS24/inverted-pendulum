@@ -10,13 +10,14 @@ import torch.optim as optim
 from torch.distributions.normal import Normal
 from data import Environment, make_env
 import metrics
+import json
 
 
 def evaluate(ppo, num_episodes=100):
     env = Environment(render=False)
     trajectories = [env.sample_episode(ppo.policy)
                     for _ in range(num_episodes)]
-    return metrics.get_default_success_rate(trajectories)
+    return metrics.get_metrics(trajectories)
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -102,6 +103,7 @@ def train(args):
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
 
+    train_stats = []
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -230,10 +232,15 @@ def train(args):
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - \
             np.var(y_true - y_pred) / var_y
-        acc = evaluate(agent)
-        print(f'update={update} | explained_var={explained_var} | acc={acc}')
+        acc, avgruns = evaluate(agent)
+        print(
+            f'update={update} | explained_var={explained_var} | acc={acc} | avgruns={avgruns}')
+        train_stats.append(
+            {'update': update, 'explained_var': explained_var, 'acc': acc, 'avgruns': avgruns})
         if update % 250 == 0:
             torch.save(agent.state_dict(), f'./checkpoints/ppo_{update}.pt')
+            json.dump({'stats': train_stats}, open(
+                f'./checkpoints/ppo_{update}.json', 'w'))
     envs.close()
 
 
