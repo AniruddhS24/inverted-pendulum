@@ -67,6 +67,11 @@ class PPOAgent(nn.Module):
 
 
 def shaped_reward(reward, current_obs, action):
+    sin_first_pole = current_obs[0][1]
+    ang_vel_first_pole = current_obs[0][6]
+    if (sin_first_pole*ang_vel_first_pole > 0):
+        if (sin_first_pole*action > 0):
+            reward += 5
     return reward
 
 
