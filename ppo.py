@@ -12,6 +12,7 @@ from data import Environment, make_env
 import metrics
 import json
 
+exp_name = "exp_"
 
 def evaluate(ppo, num_episodes=100):
     env = Environment(render=False)
@@ -67,12 +68,14 @@ class PPOAgent(nn.Module):
         return action.detach().numpy()[0]
 
 
-def shaped_reward(reward, current_obs, action):
-    sin_first_pole = current_obs[0][1]
-    ang_vel_first_pole = current_obs[0][6]
-    if (sin_first_pole*ang_vel_first_pole > 0):
-        if (sin_first_pole*action > 0):
-            reward += 10
+def shaped_reward(reward, current_obs, action, update):
+    # sin_first_pole = current_obs[0][1]
+    # ang_vel_first_pole = current_obs[0][6]
+    # cart_vel = current_obs[0][5]
+    # if (sin_first_pole*ang_vel_first_pole > 0):
+    #     if (sin_first_pole*action > 0):
+    #         if cart_vel*sin_first_pole < 0:
+    #             reward += 10
     return reward
 
 
@@ -99,6 +102,8 @@ def train(args):
                           envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    unshaped_rewards = []
+    num_trajectories = 0
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
@@ -107,10 +112,11 @@ def train(args):
     next_obs = torch.Tensor(envs.reset(seed=1)[0]).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
-
+    print(num_updates, args.num_steps)
     train_stats = []
     for update in range(1, num_updates + 1):
-        # Annealing the rate if instructed to do so.
+
+        # Annealing the rate if instructed to do so
         if args.anneal_lr:
             frac = 1.0 - (update - 1.0) / num_updates
             lrnow = frac * args.learning_rate
@@ -128,12 +134,21 @@ def train(args):
             actions[step] = action
             logprobs[step] = logprob
 
+            # print(next_obs, action)
             next_obs, reward, terminated, truncated, info = envs.step(
                 action.cpu().numpy())
-            reward = shaped_reward(reward, obs[step], actions[step])
+            unshaped_rewards.append(reward[0])
+            reward = shaped_reward(reward, obs[step], actions[step], update-1)
+            # print(unshaped_rewards[-1])
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(
                 device), torch.Tensor(terminated or truncated).to(device)
+            if (terminated or truncated) and not step == args.num_steps-1:
+                num_trajectories += 1
+            # elif not (terminated or truncated):
+            #     print("continuing")
+            
+        num_trajectories += 1
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -243,9 +258,9 @@ def train(args):
         train_stats.append(
             {'update': update, 'explained_var': explained_var, 'acc': acc, 'avgruns': avgruns})
         if update % 250 == 0:
-            torch.save(agent.state_dict(), f'./checkpoints/ppo_{update}.pt')
-            json.dump({'stats': train_stats}, open(
-                f'./checkpoints/ppo_10_{update}.json', 'w'))
+            torch.save(agent.state_dict(), f'./checkpoints/ppo_{exp_name}{update}.pt')
+            json.dump({'stats': train_stats, 'trajectories': num_trajectories, 'unshaped_rewards': unshaped_rewards}, open(
+                f'./checkpoints/ppo_{exp_name}{update}.json', 'w'))
     envs.close()
 
 

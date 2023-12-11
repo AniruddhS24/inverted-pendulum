@@ -3,7 +3,7 @@ import numpy as np
 
 
 class Environment:
-    def __init__(self, render=False):
+    def __init__(self, render=False, demo=False):
         self.render = render
         if render:
             self.env = gym.make("InvertedDoublePendulum-v4",
@@ -15,9 +15,10 @@ class Environment:
         self.env = gym.wrappers.NormalizeObservation(self.env)
         self.env = gym.wrappers.TransformObservation(
             self.env, lambda obs: np.clip(obs, -10, 10))
-        self.env = gym.wrappers.NormalizeReward(self.env)
-        self.env = gym.wrappers.TransformReward(
-            self.env, lambda reward: np.clip(reward, -10, 10))
+        if not demo:
+            self.env = gym.wrappers.NormalizeReward(self.env)
+            self.env = gym.wrappers.TransformReward(
+                self.env, lambda reward: np.clip(reward, -10, 10))
 
     def observation_space(self):
         return self.env.observation_space.shape
@@ -70,7 +71,7 @@ class Environment:
 
 def make_env():
     def thunk():
-        return Environment(render=False).env
+        return Environment(render=False, demo=True).env
     return thunk
 
 
