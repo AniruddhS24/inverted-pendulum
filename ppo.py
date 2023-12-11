@@ -99,7 +99,7 @@ def train(args):
 
     global_step = 0
     start_time = time.time()
-    next_obs = torch.Tensor(envs.reset(seed=1)[0]).to(device)
+    next_obs = torch.Tensor(envs.reset()[0]).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
 

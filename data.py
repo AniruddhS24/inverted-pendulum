@@ -3,14 +3,17 @@ import numpy as np
 
 
 class Environment:
-    def __init__(self, render=False):
+    def __init__(self, render=False, seed=None):
         self.render = render
+        self.seed = seed
         if render:
             self.env = gym.make("InvertedDoublePendulum-v4",
                                 render_mode="human")
         else:
             self.env = gym.make("InvertedDoublePendulum-v4")
         # self.env = gym.wrappers.RecordEpisodeStatistics(self.env)
+        self.env_low = np.full(self.env.observation_space.shape, -10)
+        self.env_high = np.full(self.env.observation_space.shape, 10)
         self.env = gym.wrappers.ClipAction(self.env)
         self.env = gym.wrappers.NormalizeObservation(self.env)
         self.env = gym.wrappers.TransformObservation(
@@ -25,8 +28,8 @@ class Environment:
     def action_space(self):
         return self.env.action_space.shape
 
-    def reset(self, seed):
-        observation, _ = self.env.reset(seed=seed)
+    def reset(self):
+        observation, _ = self.env.reset(seed=self.seed)
         return observation
 
     def step(self, action):
@@ -38,17 +41,17 @@ class Environment:
         if not self.render:
             raise Exception(
                 "Cannot simulate environment without render mode enabled.")
-        observation, _ = self.reset(seed=42)
+        observation = self.reset()
         for _ in range(1000):
             action = policy(observation)
             observation, reward, terminated, truncated, info = self.step(
                 action)
             if truncated:
-                observation, info = self.reset(seed=42)
+                observation = self.reset()
 
-    def sample_episode(self, policy, max_steps=500):
+    def sample_episode(self, policy, max_steps=500, full_trajectory=False):
         trajectory = []
-        observation = self.reset(seed=42)
+        observation = self.reset()
         trajectory.append({'timestep': 0,
                            'state': observation,
                            'action': 0,
@@ -63,7 +66,9 @@ class Environment:
                 'action': action,
                 'reward': reward
             })
-            if terminated or truncated:
+            if full_trajectory and (terminated or truncated):
+                observation = self.reset()
+            elif terminated or truncated:
                 return trajectory
         return trajectory
 
